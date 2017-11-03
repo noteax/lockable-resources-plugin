@@ -10,6 +10,7 @@ package org.jenkins.plugins.lockableresources;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.Extension;
+import hudson.BulkChange;
 import hudson.model.Run;
 
 import java.io.IOException;
@@ -624,7 +625,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 	 * Adds the given context and the required resources to the queue if
 	 * this context is not yet queued.
 	 */
-	public void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription) {
+	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription) {
 		queueContext(context, requiredResources, resourceDescription, false);
 	}
 
@@ -632,8 +633,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 	 * Adds the given context and the required resources to the queue if
 	 * this context is not yet queued.
 	 */
-	public void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription,
-							 boolean nonBlock) {
+	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription, boolean nonBlock) {
 		for (QueuedContextStruct entry : this.queuedContexts) {
 			if (entry.getContext() == context) {
 				return;
@@ -644,7 +644,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 		save();
 	}
 
-	public boolean unqueueContext(StepContext context) {
+	public synchronized boolean unqueueContext(StepContext context) {
 		for (Iterator<QueuedContextStruct> iter = this.queuedContexts.listIterator(); iter.hasNext(); ) {
 			if (iter.next().getContext() == context) {
 				iter.remove();
@@ -670,6 +670,17 @@ public class LockableResourcesManager extends GlobalConfiguration {
 		return (LockableResourcesManager) Jenkins.getInstance()
 				.getDescriptorOrDie(LockableResourcesManager.class);
 	}
+
+	public synchronized void save() {
+                if(BulkChange.contains(this))
+                    return;
+
+                try {
+                    getConfigFile().write(this);
+                } catch (IOException e) {
+                    LOGGER.log(Level.WARNING, "Failed to save " + getConfigFile(),e);
+                }
+        }
 
 	private static final Logger LOGGER = Logger.getLogger(LockableResourcesManager.class.getName());
 

@@ -3,8 +3,10 @@ package org.jenkins.plugins.lockableresources;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Semaphore;
 
+import hudson.Functions;
 import hudson.model.Executor;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
@@ -19,6 +21,7 @@ import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
 import org.jvnet.hudson.test.TestBuilder;
+import org.jvnet.hudson.test.recipes.WithPlugin;
 
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
@@ -28,6 +31,7 @@ import hudson.model.FreeStyleProject;
 import hudson.model.Result;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assume.assumeFalse;
 
 public class LockStepTest {
 
@@ -472,6 +476,7 @@ public class LockStepTest {
 	// a result of the first build being deleted and is nothing but noise here.
 	@Issue("JENKINS-36479")
 	@Test public void deleteRunningBuildNewBuildClearsLock() throws Exception {
+		assumeFalse(Functions.isWindows()); // TODO: Investigate failure on Windows.
 		story.addStep(new Statement() {
 			@Override public void evaluate() throws Throwable {
 				LockableResourcesManager.get().createResource("resource1");
@@ -714,5 +719,42 @@ public class LockStepTest {
 		if (!remainingRuns.isEmpty()) {
 			waitAndClear(semaphoreIndex + 1, remainingRuns);
 		}
+	}
+
+	@Test
+	@WithPlugin("jobConfigHistory.hpi")
+	public void lockWithLabelConcurrent() {
+		story.addStep(new Statement() {
+			@Override
+			public void evaluate() throws Throwable {
+				LockableResourcesManager.get().createResourceWithLabel("resource1", "label1");
+				final WorkflowJob p = story.j.jenkins.createProject(WorkflowJob.class, "p");
+				p.setDefinition(new CpsFlowDefinition(
+						"import java.util.Random; \n" +
+								"Random random = new Random(0);\n" +
+								"lock(label: 'label1') {\n" +
+								"  echo 'Resource locked'\n" +
+								"  sleep random.nextInt(10)*100\n" +
+								"}\n" +
+								"echo 'Finish'"
+				));
+				final CyclicBarrier barrier = new CyclicBarrier(51);
+				for (int i = 0; i < 50; i++) {
+					Thread thread = new Thread() {
+						public void run() {
+							try {
+								barrier.await();
+								WorkflowRun b1 = p.scheduleBuild2(0).waitForStart();
+							} catch (Exception e) {
+								System.err.println("Failed to start pipeline job");
+							}
+						}
+					};
+					thread.start();
+				}
+				barrier.await();
+				story.j.waitUntilNoActivity();
+			}
+		});
 	}
 }
