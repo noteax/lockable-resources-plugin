@@ -11,7 +11,6 @@ package org.jenkins.plugins.lockableresources;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.Extension;
 import hudson.BulkChange;
-import hudson.model.AbstractBuild;
 import hudson.model.Run;
 
 import java.io.IOException;
@@ -279,15 +278,18 @@ public class LockableResourcesManager extends GlobalConfiguration {
 		return lock(resources, build, context, null, false, null);
 	}
 
+	public synchronized boolean lock(List<LockableResource> resources,
+									 Run<?, ?> build, @Nullable StepContext context, @Nullable String logmessage, boolean inversePrecedence,
+									 String resourceVariableName) {
+		return lock(resources, build, context, logmessage, inversePrecedence, false, resourceVariableName);
+	}
+
 	/**
 	 * Try to lock the resource and return true if locked.
 	 */
 	public synchronized boolean lock(List<LockableResource> resources,
-									 Run<?, ?> build,
-									 @Nullable StepContext context,
-									 @Nullable String logmessage,
-									 boolean inversePrecedence,
-									 String resourceVariableName) {
+									 Run<?, ?> build, @Nullable StepContext context, @Nullable String logmessage, boolean inversePrecedence,
+									 boolean nonBlock, String resourceVariableName) {
 		boolean needToWait = false;
 
 		for (LockableResource r : resources) {
@@ -308,7 +310,11 @@ public class LockableResourcesManager extends GlobalConfiguration {
 				for (LockableResource resource : resources) {
 					resourceNames.add(resource.getName());
 				}
-				LockStepExecution.proceed(resourceNames, context, logmessage, inversePrecedence, resourceVariableName);
+				if (nonBlock) {
+					GetLockStep.Execution.proceed(resourceNames, context, logmessage, inversePrecedence, resourceVariableName);
+				} else {
+					LockStepExecution.proceed(resourceNames, context, logmessage, inversePrecedence, resourceVariableName);
+				}
 			}
 		}
 		save();
@@ -422,7 +428,13 @@ public class LockableResourcesManager extends GlobalConfiguration {
 			freeResources(freeResources, build);
 
 			// continue with next context
-			LockStepExecution.proceed(resourceNamesToLock, nextContext.getContext(), nextContext.getResourceDescription(), inversePrecedence, nextContext.getResourceVariableName());
+			if (nextContext.isNonBlockScoped()) {
+				GetLockStep.Execution.proceed(resourceNamesToLock, nextContext.getContext(), nextContext.getResourceDescription(),
+						inversePrecedence, nextContext.getResourceVariableName());
+
+			} else {
+				LockStepExecution.proceed(resourceNamesToLock, nextContext.getContext(), nextContext.getResourceDescription(), inversePrecedence, nextContext.getResourceVariableName());
+			}
 		}
 		save();
 	}
@@ -615,13 +627,21 @@ public class LockableResourcesManager extends GlobalConfiguration {
 	 * this context is not yet queued.
 	 */
 	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription, String resourceVariableName) {
+		queueContext(context, requiredResources, resourceDescription, false, resourceVariableName);
+	}
+
+	/*
+	 * Adds the given context and the required resources to the queue if
+	 * this context is not yet queued.
+	 */
+	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription, boolean nonBlock, String resourceVariableName) {
 		for (QueuedContextStruct entry : this.queuedContexts) {
 			if (entry.getContext() == context) {
 				return;
 			}
 		}
 
-		this.queuedContexts.add(new QueuedContextStruct(context, requiredResources, resourceDescription, resourceVariableName));
+		this.queuedContexts.add(new QueuedContextStruct(context, requiredResources, resourceDescription, nonBlock, resourceVariableName));
 		save();
 	}
 
@@ -634,6 +654,17 @@ public class LockableResourcesManager extends GlobalConfiguration {
 			}
 		}
 		return false;
+	}
+
+	@CheckForNull
+	public LockableResourcesStruct getResourceForQueuedContext(@Nonnull StepContext context) {
+		for (QueuedContextStruct queuedContextStruct : queuedContexts) {
+			if (queuedContextStruct.getContext().equals(context)) {
+				return queuedContextStruct.getResources();
+			}
+		}
+
+		return null;
 	}
 
 	public static LockableResourcesManager get() {

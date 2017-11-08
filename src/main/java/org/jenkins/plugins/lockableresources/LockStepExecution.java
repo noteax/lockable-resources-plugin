@@ -39,21 +39,8 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 	public boolean start() throws Exception {
 		step.validate();
 
-		listener.getLogger().println("Trying to acquire lock on [" + step + "]");
-		List<String> resources = new ArrayList<String>();
-		if (step.resource != null) {
-			if (LockableResourcesManager.get().createResource(step.resource)) {
-				listener.getLogger().println("Resource [" + step + "] did not exist. Created.");
-			}
-			resources.add(step.resource);
-		}
-		LockableResourcesStruct resourceHolder = new LockableResourcesStruct(resources, step.label, step.quantity);
-		// determine if there are enough resources available to proceed
-		List<LockableResource> available = LockableResourcesManager.get().checkResourcesAvailability(resourceHolder, listener.getLogger(), null);
-        if (available == null || !LockableResourcesManager.get().lock(available, run, getContext(), step.toString(), step.inversePrecedence, step.variable)) {
-			listener.getLogger().println("[" + step + "] is locked, waiting...");
-			LockableResourcesManager.get().queueContext(getContext(), resourceHolder, step.toString(), step.variable);
-		} // proceed is called inside lock if execution is possible
+		LockUtils.queueLock(step, step.resource, step.label, step.quantity, step.inversePrecedence, step.variable, getContext());
+
 		return false;
 	}
 
@@ -92,7 +79,29 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 	    return bodyInvoker;
     }
 
-    private static final class Callback extends BodyExecutionCallback.TailCall {
+	private static final class ResourceVariableNameExpander extends EnvironmentExpander {
+		private static final long serialVersionUID = 1;
+		private final Map<String,String> overrides;
+
+		private ResourceVariableNameExpander(String resourceVariableName, List<String> resourceNames) {
+			this.overrides = new HashMap<>();
+			this.overrides.put(resourceVariableName, joinResourceNames(resourceNames));
+		}
+
+		private String joinResourceNames(List<String> resourceNames) {
+			StringBuilder resourceName = new StringBuilder();
+			for (String res : resourceNames) {
+				resourceName.append((resourceName.length() == 0) ? res : ", " + res);
+			}
+			return resourceName.toString();
+		}
+
+		@Override public void expand(EnvVars env) throws IOException, InterruptedException {
+			env.overrideAll(overrides);
+		}
+	}
+
+	private static final class Callback extends BodyExecutionCallback.TailCall {
 
 		private final List<String> resourceNames;
 		private final String resourceDescription;
@@ -113,28 +122,6 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 		private static final long serialVersionUID = 1L;
 
 	}
-
-    private static final class ResourceVariableNameExpander extends EnvironmentExpander {
-        private static final long serialVersionUID = 1;
-        private final Map<String,String> overrides;
-
-        private ResourceVariableNameExpander(String resourceVariableName, List<String> resourceNames) {
-            this.overrides = new HashMap<>();
-            this.overrides.put(resourceVariableName, joinResourceNames(resourceNames));
-        }
-
-        private String joinResourceNames(List<String> resourceNames) {
-            StringBuilder resourceName = new StringBuilder();
-            for (String res : resourceNames) {
-                resourceName.append((resourceName.length() == 0) ? res : ", " + res);
-            }
-            return resourceName.toString();
-        }
-
-        @Override public void expand(EnvVars env) throws IOException, InterruptedException {
-            env.overrideAll(overrides);
-        }
-    }
 
 	@Override
 	public void stop(Throwable cause) throws Exception {
