@@ -15,7 +15,7 @@ import java.util.List;
 public class LockUtils {
 
     public static void queueLock(@Nonnull Step step, @CheckForNull String resource, String label, int quantity,
-                                 boolean inversePrecedence, @Nonnull StepContext context) throws Exception {
+                                 boolean inversePrecedence, String variable,  @Nonnull StepContext context) throws Exception {
         Run<?,?> run = context.get(Run.class);
         TaskListener listener = context.get(TaskListener.class);
 
@@ -36,9 +36,9 @@ public class LockUtils {
         // determine if there are enough resources available to proceed
         List<LockableResource> available = LockableResourcesManager.get().checkResourcesAvailability(resourceHolder, listener.getLogger(), null);
         if (available == null || !LockableResourcesManager.get().lock(available, run, context, step.toString(), inversePrecedence,
-                nonBlock)) {
+                nonBlock, variable)) {
             listener.getLogger().println("[" + step + "] is locked, waiting...");
-            LockableResourcesManager.get().queueContext(context, resourceHolder, step.toString(), nonBlock);
+            LockableResourcesManager.get().queueContext(context, resourceHolder, step.toString(), nonBlock, variable);
         } // proceed is called inside lock if execution is possible
     }
 }

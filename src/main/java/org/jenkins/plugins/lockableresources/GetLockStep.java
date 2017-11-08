@@ -33,6 +33,9 @@ public class GetLockStep extends Step {
     @CheckForNull
     private String label;
 
+    @CheckForNull
+    public String variable = null;
+
     private int quantity = 0;
 
     @DataBoundConstructor
@@ -58,6 +61,11 @@ public class GetLockStep extends Step {
     }
 
     @DataBoundSetter
+    public void setVariable(String variable) {
+        this.variable = variable;
+    }
+
+    @DataBoundSetter
     public void setQuantity(int quantity) {
         this.quantity = quantity;
     }
@@ -75,11 +83,10 @@ public class GetLockStep extends Step {
      * Label and resource are mutual exclusive.
      */
     public void validate() throws Exception {
-        if (label != null && !label.isEmpty() && resource !=  null && !resource.isEmpty()) {
+        if (label != null && !label.isEmpty() && resource != null && !resource.isEmpty()) {
             throw new IllegalArgumentException("Label and resource name cannot be specified simultaneously.");
         }
     }
-
 
 
     @Extension
@@ -127,7 +134,8 @@ public class GetLockStep extends Step {
         public boolean start() throws Exception {
             step.validate();
 
-            LockUtils.queueLock(step, step.getResource(), step.getLabel(), step.getQuantity(), false, getContext());
+            LockUtils.queueLock(step, step.getResource(), step.getLabel(), step.getQuantity(), false, step.variable,
+                    getContext());
 
             return false;
         }
@@ -157,10 +165,10 @@ public class GetLockStep extends Step {
         }
 
         public static void proceed(@Nonnull List<String> resourceNames, @Nonnull StepContext context,
-                                   @CheckForNull String resourceDescription, boolean inversePrecedence) {
+                                   @CheckForNull String resourceDescription, boolean inversePrecedence, String resourceVariableName) {
             try {
                 context.get(TaskListener.class).getLogger().println("Lock acquired on [" + resourceDescription + "]");
-                context.get(FlowNode.class).addAction(new LockedFlowNodeAction(resourceNames, resourceDescription, inversePrecedence));
+                context.get(FlowNode.class).addAction(new LockedFlowNodeAction(resourceNames, resourceDescription, inversePrecedence, resourceVariableName));
                 context.onSuccess(null);
             } catch (Exception e) {
                 context.onFailure(e);

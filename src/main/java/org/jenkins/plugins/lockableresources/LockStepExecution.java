@@ -1,20 +1,26 @@
 package org.jenkins.plugins.lockableresources;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import hudson.EnvVars;
 import org.jenkins.plugins.lockableresources.queue.LockableResourcesStruct;
-import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
-import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
-import org.jenkinsci.plugins.workflow.steps.StepContext;
-import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 
 import com.google.inject.Inject;
 
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
+import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
+import org.jenkinsci.plugins.workflow.steps.BodyInvoker;
+import org.jenkinsci.plugins.workflow.steps.EnvironmentExpander;
+import org.jenkinsci.plugins.workflow.steps.StepContext;
+import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 
 public class LockStepExecution extends AbstractStepExecutionImpl {
 
@@ -33,12 +39,12 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 	public boolean start() throws Exception {
 		step.validate();
 
-		LockUtils.queueLock(step, step.resource, step.label, step.quantity, step.inversePrecedence, getContext());
+		LockUtils.queueLock(step, step.resource, step.label, step.quantity, step.inversePrecedence, step.variable, getContext());
 
 		return false;
 	}
 
-	public static void proceed(List<String> resourcenames, StepContext context, String resourceDescription, boolean inversePrecedence) {
+	public static void proceed(List<String> resourcenames, StepContext context, String resourceDescription, boolean inversePrecedence, String resourceVariableName) {
 		Run<?, ?> r = null;
 		try {
 			r = context.get(Run.class);
@@ -48,11 +54,51 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 			return;
 		}
 
-		LOGGER.finest("Lock acquired on [" + resourceDescription + "] by " + r.getExternalizableId());
-		context.newBodyInvoker().
-			withCallback(new Callback(resourcenames, resourceDescription, inversePrecedence)).
-			withDisplayName(null).
-			start();
+        LOGGER.finest("Lock acquired on [" + resourceDescription + "] by " + r.getExternalizableId());
+
+        handleResourceVariable(context, resourcenames, resourceVariableName)
+                .withCallback(new Callback(resourcenames, resourceDescription, inversePrecedence))
+                .withDisplayName(null)
+                .start();
+    }
+
+    private static BodyInvoker handleResourceVariable(StepContext context, List<String> resourcenames, String resourceVariableName) {
+        BodyInvoker bodyInvoker = context.newBodyInvoker();
+        if (resourceVariableName != null) {
+            EnvironmentExpander environmentExpander;
+            try {
+                environmentExpander = EnvironmentExpander.merge(context.get(EnvironmentExpander.class),
+                        new ResourceVariableNameExpander(resourceVariableName, resourcenames));
+            } catch (Exception e) {
+                throw new RuntimeException("adding environment variable for the resource name failed.", e);
+            }
+
+            bodyInvoker = bodyInvoker.withContext(environmentExpander);
+        }
+
+	    return bodyInvoker;
+    }
+
+	private static final class ResourceVariableNameExpander extends EnvironmentExpander {
+		private static final long serialVersionUID = 1;
+		private final Map<String,String> overrides;
+
+		private ResourceVariableNameExpander(String resourceVariableName, List<String> resourceNames) {
+			this.overrides = new HashMap<>();
+			this.overrides.put(resourceVariableName, joinResourceNames(resourceNames));
+		}
+
+		private String joinResourceNames(List<String> resourceNames) {
+			StringBuilder resourceName = new StringBuilder();
+			for (String res : resourceNames) {
+				resourceName.append((resourceName.length() == 0) ? res : ", " + res);
+			}
+			return resourceName.toString();
+		}
+
+		@Override public void expand(EnvVars env) throws IOException, InterruptedException {
+			env.overrideAll(overrides);
+		}
 	}
 
 	private static final class Callback extends BodyExecutionCallback.TailCall {
@@ -81,7 +127,7 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 	public void stop(Throwable cause) throws Exception {
 		boolean cleaned = LockableResourcesManager.get().unqueueContext(getContext());
 		if (!cleaned) {
-			LOGGER.log(Level.WARNING, "Cannot remove context from lockable resource waiting list. The context is not in the waiting list.");
+			LOGGER.log(Level.WARNING, "Cannot remove context from lockable resource witing list. The context is not in the waiting list.");
 		}
 		getContext().onFailure(cause);
 	}

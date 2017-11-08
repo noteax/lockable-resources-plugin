@@ -13,7 +13,7 @@ import java.io.Serializable;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 
 /**
- * This class is used to queue pipeline contexts 
+ * This class is used to queue pipeline contexts
  * which shall be executed once the necessary
  * resources are free'd.
  */
@@ -39,19 +39,27 @@ public class QueuedContextStruct implements Serializable {
 	 */
 	private boolean nonBlockScoped = false;
 
-	public QueuedContextStruct(StepContext context, LockableResourcesStruct lockableResourcesStruct, String resourceDescription) {
-		this(context, lockableResourcesStruct, resourceDescription, false);
+    /**
+     * Name of the environment variable holding the resource name
+     */
+    private String resourceVariableName;
+
+	public QueuedContextStruct(StepContext context, LockableResourcesStruct lockableResourcesStruct, String resourceDescription,
+                               String resourceVariableName) {
+		this(context, lockableResourcesStruct, resourceDescription, false, resourceVariableName);
 	}
 
 	/**
 	 * Constructor for the QueuedContextStruct class.
 	 */
 	public QueuedContextStruct(StepContext context, LockableResourcesStruct lockableResourcesStruct, String resourceDescription,
-							   boolean nonBlockScoped) {
+							   boolean nonBlockScoped,
+                               String resourceVariableName) {
 		this.context = context;
 		this.lockableResourcesStruct = lockableResourcesStruct;
 		this.resourceDescription = resourceDescription;
 		this.nonBlockScoped = nonBlockScoped;
+        this.resourceVariableName = resourceVariableName;
 	}
 	
 	/**
@@ -81,6 +89,10 @@ public class QueuedContextStruct implements Serializable {
 	public boolean isNonBlockScoped() {
 		return nonBlockScoped;
 	}
+
+    public String getResourceVariableName() {
+        return resourceVariableName;
+    }
 
 	private static final long serialVersionUID = 1L;
 }

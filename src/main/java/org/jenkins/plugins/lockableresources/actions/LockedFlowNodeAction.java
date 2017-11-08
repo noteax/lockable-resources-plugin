@@ -11,13 +11,15 @@ public class LockedFlowNodeAction extends InvisibleAction {
     private List<String> resourceNames = new ArrayList<>();
     private boolean inversePrecedence;
     private String resourceDescription;
+    private String resourceVariableName;
     private boolean released;
 
     public LockedFlowNodeAction(@Nonnull List<String> resourceNames, @CheckForNull String resourceDescription,
-                                boolean inversePrecedence) {
+                                boolean inversePrecedence, String resourceVariableName) {
         this.resourceNames.addAll(resourceNames);
         this.resourceDescription = resourceDescription;
         this.inversePrecedence = inversePrecedence;
+        this.resourceVariableName = resourceVariableName;
     }
 
     @Nonnull
@@ -36,6 +38,10 @@ public class LockedFlowNodeAction extends InvisibleAction {
 
     public void release() {
         this.released = true;
+    }
+
+    public String getResourceVariableName() {
+        return resourceVariableName;
     }
 
     public boolean isReleased() {

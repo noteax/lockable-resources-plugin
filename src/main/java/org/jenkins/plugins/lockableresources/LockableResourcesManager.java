@@ -187,7 +187,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 			return null;
 		}
 	}
-	
+
 	/**
 	 * Try to acquire the resources required by the task.
 	 * @param number Number of resources to acquire. {@code 0} means all
@@ -275,12 +275,13 @@ public class LockableResourcesManager extends GlobalConfiguration {
 	}
 	
 	public synchronized boolean lock(List<LockableResource> resources, Run<?, ?> build, @Nullable StepContext context) {
-		return lock(resources, build, context, null, false);
+		return lock(resources, build, context, null, false, null);
 	}
 
 	public synchronized boolean lock(List<LockableResource> resources,
-									 Run<?, ?> build, @Nullable StepContext context, @Nullable String logmessage, boolean inversePrecedence) {
-		return lock(resources, build, context, logmessage, inversePrecedence, false);
+									 Run<?, ?> build, @Nullable StepContext context, @Nullable String logmessage, boolean inversePrecedence,
+									 String resourceVariableName) {
+		return lock(resources, build, context, logmessage, inversePrecedence, false, resourceVariableName);
 	}
 
 	/**
@@ -288,7 +289,7 @@ public class LockableResourcesManager extends GlobalConfiguration {
 	 */
 	public synchronized boolean lock(List<LockableResource> resources,
 									 Run<?, ?> build, @Nullable StepContext context, @Nullable String logmessage, boolean inversePrecedence,
-									 boolean nonBlock) {
+									 boolean nonBlock, String resourceVariableName) {
 		boolean needToWait = false;
 
 		for (LockableResource r : resources) {
@@ -310,9 +311,9 @@ public class LockableResourcesManager extends GlobalConfiguration {
 					resourceNames.add(resource.getName());
 				}
 				if (nonBlock) {
-					GetLockStep.Execution.proceed(resourceNames, context, logmessage, inversePrecedence);
+					GetLockStep.Execution.proceed(resourceNames, context, logmessage, inversePrecedence, resourceVariableName);
 				} else {
-					LockStepExecution.proceed(resourceNames, context, logmessage, inversePrecedence);
+					LockStepExecution.proceed(resourceNames, context, logmessage, inversePrecedence, resourceVariableName);
 				}
 			}
 		}
@@ -429,10 +430,10 @@ public class LockableResourcesManager extends GlobalConfiguration {
 			// continue with next context
 			if (nextContext.isNonBlockScoped()) {
 				GetLockStep.Execution.proceed(resourceNamesToLock, nextContext.getContext(), nextContext.getResourceDescription(),
-						inversePrecedence);
+						inversePrecedence, nextContext.getResourceVariableName());
 
 			} else {
-				LockStepExecution.proceed(resourceNamesToLock, nextContext.getContext(), nextContext.getResourceDescription(), inversePrecedence);
+				LockStepExecution.proceed(resourceNamesToLock, nextContext.getContext(), nextContext.getResourceDescription(), inversePrecedence, nextContext.getResourceVariableName());
 			}
 		}
 		save();
@@ -625,22 +626,22 @@ public class LockableResourcesManager extends GlobalConfiguration {
 	 * Adds the given context and the required resources to the queue if
 	 * this context is not yet queued.
 	 */
-	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription) {
-		queueContext(context, requiredResources, resourceDescription, false);
+	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription, String resourceVariableName) {
+		queueContext(context, requiredResources, resourceDescription, false, resourceVariableName);
 	}
 
 	/*
 	 * Adds the given context and the required resources to the queue if
 	 * this context is not yet queued.
 	 */
-	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription, boolean nonBlock) {
+	public synchronized void queueContext(StepContext context, LockableResourcesStruct requiredResources, String resourceDescription, boolean nonBlock, String resourceVariableName) {
 		for (QueuedContextStruct entry : this.queuedContexts) {
 			if (entry.getContext() == context) {
 				return;
 			}
 		}
 
-		this.queuedContexts.add(new QueuedContextStruct(context, requiredResources, resourceDescription, nonBlock));
+		this.queuedContexts.add(new QueuedContextStruct(context, requiredResources, resourceDescription, nonBlock, resourceVariableName));
 		save();
 	}
 
