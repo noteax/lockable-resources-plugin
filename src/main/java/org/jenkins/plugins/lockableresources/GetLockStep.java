@@ -7,6 +7,7 @@ import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import org.jenkins.plugins.lockableresources.actions.LockedFlowNodeAction;
 import org.jenkins.plugins.lockableresources.queue.LockableResourcesStruct;
+import org.jenkins.plugins.lockableresources.util.ResourcesNames;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.Step;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
@@ -33,9 +34,6 @@ public class GetLockStep extends Step {
     @CheckForNull
     private String label;
 
-    @CheckForNull
-    public String variable = null;
-
     private int quantity = 0;
 
     @DataBoundConstructor
@@ -58,11 +56,6 @@ public class GetLockStep extends Step {
 
     public String getLabel() {
         return label;
-    }
-
-    @DataBoundSetter
-    public void setVariable(String variable) {
-        this.variable = variable;
     }
 
     @DataBoundSetter
@@ -134,7 +127,7 @@ public class GetLockStep extends Step {
         public boolean start() throws Exception {
             step.validate();
 
-            LockUtils.queueLock(step, step.getResource(), step.getLabel(), step.getQuantity(), false, step.variable,
+            LockUtils.queueLock(step, step.getResource(), step.getLabel(), step.getQuantity(), false, null,
                     getContext());
 
             return false;
@@ -169,10 +162,11 @@ public class GetLockStep extends Step {
             try {
                 context.get(TaskListener.class).getLogger().println("Lock acquired on [" + resourceDescription + "]");
                 context.get(FlowNode.class).addAction(new LockedFlowNodeAction(resourceNames, resourceDescription, inversePrecedence, resourceVariableName));
-                context.onSuccess(null);
+                context.onSuccess(ResourcesNames.joinResourceNames(resourceNames));
             } catch (Exception e) {
                 context.onFailure(e);
             }
         }
+
     }
 }

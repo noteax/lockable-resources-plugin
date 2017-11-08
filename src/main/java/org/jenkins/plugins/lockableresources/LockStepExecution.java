@@ -15,6 +15,7 @@ import com.google.inject.Inject;
 
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import org.jenkins.plugins.lockableresources.util.ResourcesNames;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
 import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
 import org.jenkinsci.plugins.workflow.steps.BodyInvoker;
@@ -79,21 +80,13 @@ public class LockStepExecution extends AbstractStepExecutionImpl {
 	    return bodyInvoker;
     }
 
-	private static final class ResourceVariableNameExpander extends EnvironmentExpander {
+	public static final class ResourceVariableNameExpander extends EnvironmentExpander {
 		private static final long serialVersionUID = 1;
 		private final Map<String,String> overrides;
 
-		private ResourceVariableNameExpander(String resourceVariableName, List<String> resourceNames) {
+		public ResourceVariableNameExpander(String resourceVariableName, List<String> resourceNames) {
 			this.overrides = new HashMap<>();
-			this.overrides.put(resourceVariableName, joinResourceNames(resourceNames));
-		}
-
-		private String joinResourceNames(List<String> resourceNames) {
-			StringBuilder resourceName = new StringBuilder();
-			for (String res : resourceNames) {
-				resourceName.append((resourceName.length() == 0) ? res : ", " + res);
-			}
-			return resourceName.toString();
+			this.overrides.put(resourceVariableName, ResourcesNames.joinResourceNames(resourceNames));
 		}
 
 		@Override public void expand(EnvVars env) throws IOException, InterruptedException {
